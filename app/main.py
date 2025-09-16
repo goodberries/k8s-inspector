@@ -123,7 +123,7 @@ def generate_kubectl_command(question: str, hints: Dict[str, Any]) -> List[str]:
 
 
 READ_ONLY_SUBCMDS = {"get", "describe", "logs", "top", "api-resources", "api-versions", "cluster-info", "version"}
-FORBIDDEN_TOKENS = {";", "|", "&&", "||", ">", "<", "`", "$(`, "${"}
+FORBIDDEN_TOKENS = {";", "|", "&&", "||", ">", "<", "`", "$("}
 FORBIDDEN_SUBCMDS = {"delete", "apply", "create", "replace", "patch", "edit", "exec", "attach", "drain", "cordon", "taint", "annotate", "label", "scale", "rollout", "expose", "set"}
 
 
