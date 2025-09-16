@@ -15,7 +15,7 @@ spec:
       serviceAccountName: k8s-nl-service
       containers:
         - name: app
-          image: ghcr.io/goodberries/k8s-nl-service:latest
+          image: ghcr.io/goodberries/k8s-nl-service:v1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
