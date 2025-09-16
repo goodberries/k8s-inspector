@@ -56,6 +56,7 @@ metadata:
 spec:
   selector:
     app: k8s-inspector
+  type: NodePort
   ports:
     - port: 80
       targetPort: 8080
