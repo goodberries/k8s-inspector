@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>K8s Inspector</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>K8s Inspector</h1>
+    <form id="ask-form">
+      <input id="question" type="text" placeholder="Ask: what are the pods running?" />
+      <input id="namespace" type="text" placeholder="Namespace (optional)" />
+      <input id="name" type="text" placeholder="Resource name (for logs/describe)" />
+      <input id="container" type="text" placeholder="Container (for logs)" />
+      <input id="tail" type="number" placeholder="Tail lines (logs)" />
+      <label class="checkbox">
+        <input id="explain" type="checkbox" checked /> Explain and suggest fixes
+      </label>
+      <button type="submit">Ask</button>
+    </form>
+
+    <div id="result" class="card hidden">
+      <h2>Result</h2>
+      <div class="row">
+        <div class="col">
+          <h3>Summary</h3>
+          <pre id="summary"></pre>
+          <h3>Suggestions</h3>
+          <ul id="suggestions"></ul>
+        </div>
+        <div class="col">
+          <h3>kubectl</h3>
+          <pre id="kubectl"></pre>
+          <h3>Output</h3>
+          <pre id="stdout"></pre>
+          <h3>Errors</h3>
+          <pre id="stderr"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/static/script.js"></script>
+</body>
+</html>

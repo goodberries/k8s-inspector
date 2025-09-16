@@ -1,0 +1,14 @@
+* { box-sizing: border-box; font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+body { margin: 0; background: #0b1220; color: #e8eef9; }
+.container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+h1 { margin-bottom: 16px; }
+form { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 16px; }
+form input[type="text"], form input[type="number"] { padding: 10px; border: 1px solid #223; border-radius: 8px; background: #0e172b; color: #e8eef9; }
+.checkbox { grid-column: span 2; display: flex; align-items: center; gap: 8px; }
+button { grid-column: span 1; padding: 10px 14px; border: none; border-radius: 8px; background: #4f46e5; color: white; cursor: pointer; }
+button:hover { background: #4338ca; }
+.card { background: #0e172b; border: 1px solid #223; border-radius: 12px; padding: 16px; }
+.hidden { display: none; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+pre { white-space: pre-wrap; word-wrap: break-word; background: #0b1220; border: 1px solid #223; padding: 12px; border-radius: 8px; min-height: 48px; }
+ul { margin: 0; padding-left: 20px; }
