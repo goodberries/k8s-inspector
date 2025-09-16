@@ -2,6 +2,9 @@ import os
 import json
 import subprocess
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any, Tuple
 import re
@@ -68,6 +71,22 @@ except Exception:
     boto3 = None
 
 app = FastAPI(title="K8s NL Interface Service", version="0.2.0")
+
+# CORS: allow all (demo)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static UI
+app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
+
+@app.get("/")
+def root():
+    return RedirectResponse(url="/static/index.html")
 
 class NLQuery(BaseModel):
     question: str
