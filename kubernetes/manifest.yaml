@@ -15,7 +15,7 @@ spec:
       serviceAccountName: k8s-inspector
       containers:
         - name: app
-          image: ghcr.io/goodberries/k8s-inspector:v1
+          image: yashwanthydg/k8s-inspector:v1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
