@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-nl-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-nl-service
+  template:
+    metadata:
+      labels:
+        app: k8s-nl-service
+    spec:
+      serviceAccountName: k8s-nl-service
+      containers:
+        - name: app
+          image: ghcr.io/goodberries/k8s-nl-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: AWS_REGION
+              value: us-east-1
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom: 
+                secretKeyRef:
+                  name: aws-credentials
+                  key: aws_access_key_id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom: 
+                secretKeyRef:
+                  name: aws-credentials
+                  key: aws_secret_access_key
+            - name: BEDROCK_MODEL_ID
+              value: anthropic.claude-3-haiku-20240307-v1:0
+            - name: ENABLE_SUMMARIZE
+              value: "true"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-nl-service
+spec:
+  selector:
+    app: k8s-nl-service
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-nl-service
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-nl-service
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "nodes", "namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-nl-service
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8s-nl-service
+subjects:
+  - kind: ServiceAccount
+    name: k8s-nl-service
+    namespace: default
