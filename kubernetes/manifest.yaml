@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: k8s-nl-service
+  name: k8s-inspector
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: k8s-nl-service
+      app: k8s-inspector
   template:
     metadata:
       labels:
-        app: k8s-nl-service
+        app: k8s-inspector
     spec:
-      serviceAccountName: k8s-nl-service
+      serviceAccountName: k8s-inspector
       containers:
         - name: app
-          image: ghcr.io/goodberries/k8s-nl-service:v1
+          image: ghcr.io/goodberries/k8s-inspector:v1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -52,10 +52,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: k8s-nl-service
+  name: k8s-inspector
 spec:
   selector:
-    app: k8s-nl-service
+    app: k8s-inspector
   ports:
     - port: 80
       targetPort: 8080
@@ -65,12 +65,12 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: k8s-nl-service
+  name: k8s-inspector
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: k8s-nl-service
+  name: k8s-inspector
 rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log", "services", "nodes", "namespaces"]
@@ -79,12 +79,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: k8s-nl-service
+  name: k8s-inspector
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: k8s-nl-service
+  name: k8s-inspector
 subjects:
   - kind: ServiceAccount
-    name: k8s-nl-service
+    name: k8s-inspector
     namespace: default
