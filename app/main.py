@@ -84,8 +84,9 @@ def planner(state: AgentState) -> Dict[str, Any]:
         "You have two plans: 'direct' for simple questions, and 'get_then_filter' for questions that require searching or filtering. "
         "Output STRICT JSON only. "
         "Schema for 'direct': {\"plan\": \"direct\", \"command\": [\"kubectl\", \"...\"]}. "
-        "Schema for 'get_then_filter': {\"plan\": \"get_then_filter\", \"resource\": \"<pods|services|nodes|...etc>\", \"filter\": {\"field\": \"<e.g., metadata.name>\", \"operator\": \"<startswith|contains|equals>\", \"value\": \"<string>\"}}. "
+        "Schema for 'get_then_filter': {\"plan\": \"get_then_filter\", \"resource\": \"<pods|services|nodes|...etc>\", \"filter\": {\"field\": \"<e.g., metadata.name>\", \"operator\": \"<startswith|contains|equals|greater_than>\", \"value\": \"<string_or_number>\"}}. "
         "For 'get_then_filter', the resource should be what you need to list broadly. "
+        "For pod restarts, the field is 'status.containerStatuses.restartCount', the operator is 'greater_than', and the value is 0. "
         "Always use read-only commands (get, describe, logs, top). Never use write commands."
     )
     hints = state.get("hints", {})
@@ -183,42 +184,48 @@ def filter_results(state: AgentState) -> Dict[str, Any]:
     criteria = state.get("filter_criteria")
     output = state.get("output")
 
-    # --- NEW: Pass-through if filtering is not possible or not needed ---
     if not criteria or not criteria.get("field") or "value" not in criteria:
-        # If criteria is invalid or incomplete, just pass the original output through.
         return {"output": output}
         
     if not output or not isinstance(output, dict) or "items" not in output:
-        # If the output isn't a list of items, we can't filter it.
         return {"error": "Cannot filter: invalid or non-list output."}
 
-    field_path = criteria["field"].split('.')
-    op = criteria.get("operator", "contains") # Default to 'contains' if not specified
+    field_path_str = criteria["field"]
+    op = criteria.get("operator", "contains")
     value = criteria["value"]
     
     filtered_items = []
     for item in output.get("items", []):
         try:
+            # --- NEW: Special handling for restart counts ---
+            if field_path_str == "status.containerStatuses.restartCount":
+                if any(cs.get("restartCount", 0) > 0 for cs in item.get("status", {}).get("containerStatuses", [])):
+                    filtered_items.append(item)
+                continue # Move to the next item
+
+            # --- Existing logic for simple fields ---
             current_val = item
-            for key in field_path:
+            for key in field_path_str.split('.'):
                 current_val = current_val[key]
             
             match = False
-            # Ensure case-insensitive comparison for user-friendliness
             s_current_val = str(current_val).lower()
             s_value = str(value).lower()
 
             if op == "startswith" and s_current_val.startswith(s_value): match = True
             elif op == "contains" and s_value in s_current_val: match = True
             elif op == "equals" and s_current_val == s_value: match = True
+            elif op == "greater_than":
+                try:
+                    if float(current_val) > float(value): match = True
+                except (ValueError, TypeError):
+                    pass # Cannot compare if values are not numeric
             
             if match:
                 filtered_items.append(item)
         except (KeyError, TypeError):
             continue
-    
-    print(filtered_items[:5])
-
+            
     return {"output": {"items": filtered_items}}
 
 def summarize_output(state: AgentState) -> Dict[str, Any]:
