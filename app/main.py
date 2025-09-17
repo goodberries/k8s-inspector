@@ -224,6 +224,7 @@ def filter_results(state: AgentState) -> Dict[str, Any]:
             
             if match:
                 filtered_items.append(item)
+            print(filtered_items)
         except (KeyError, TypeError):
             continue
             
