@@ -48,6 +48,14 @@ form.addEventListener('submit', async (e) => {
     kubectlEl.textContent = (data.kubectl || []).join(' ');
     stdoutEl.textContent = typeof data.stdout === 'string' ? data.stdout : pretty(data.stdout);
     stderrEl.textContent = data.stderr || '';
+
+    // Clear the form for the next request
+    qEl.value = '';
+    nsEl.value = '';
+    nameEl.value = '';
+    containerEl.value = '';
+    tailEl.value = '';
+
   } catch (err) {
     resCard.classList.remove('hidden');
     summaryEl.textContent = '';
