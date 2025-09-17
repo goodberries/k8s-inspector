@@ -117,6 +117,7 @@ def planner(state: AgentState) -> Dict[str, Any]:
             return {"plan": "direct", "command": plan_data["command"]}
         else:
             return {"error": "LLM returned an invalid plan."}
+        print(plan_data)
     except Exception as e:
         return {"error": f"Planner failed: {e}"}
 
