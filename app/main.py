@@ -182,11 +182,18 @@ def execute_command(state: AgentState) -> Dict[str, Any]:
 def filter_results(state: AgentState) -> Dict[str, Any]:
     criteria = state.get("filter_criteria")
     output = state.get("output")
-    if not criteria or not output or not isinstance(output, dict) or "items" not in output:
-        return {"error": "Cannot filter: invalid criteria or non-list output."}
+
+    # --- NEW: Pass-through if filtering is not possible or not needed ---
+    if not criteria or not criteria.get("field") or "value" not in criteria:
+        # If criteria is invalid or incomplete, just pass the original output through.
+        return {"output": output}
+        
+    if not output or not isinstance(output, dict) or "items" not in output:
+        # If the output isn't a list of items, we can't filter it.
+        return {"error": "Cannot filter: invalid or non-list output."}
 
     field_path = criteria["field"].split('.')
-    op = criteria["operator"]
+    op = criteria.get("operator", "contains") # Default to 'contains' if not specified
     value = criteria["value"]
     
     filtered_items = []
@@ -197,15 +204,21 @@ def filter_results(state: AgentState) -> Dict[str, Any]:
                 current_val = current_val[key]
             
             match = False
-            if op == "startswith" and str(current_val).startswith(value): match = True
-            elif op == "contains" and value in str(current_val): match = True
-            elif op == "equals" and str(current_val) == value: match = True
+            # Ensure case-insensitive comparison for user-friendliness
+            s_current_val = str(current_val).lower()
+            s_value = str(value).lower()
+
+            if op == "startswith" and s_current_val.startswith(s_value): match = True
+            elif op == "contains" and s_value in s_current_val: match = True
+            elif op == "equals" and s_current_val == s_value: match = True
             
             if match:
                 filtered_items.append(item)
         except (KeyError, TypeError):
             continue
-            
+    
+    print(filtered_items[:5])
+
     return {"output": {"items": filtered_items}}
 
 def summarize_output(state: AgentState) -> Dict[str, Any]:
