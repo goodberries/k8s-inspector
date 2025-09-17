@@ -142,13 +142,25 @@ def execute_command(state: AgentState) -> Dict[str, Any]:
     cmd = state["command"]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=int(os.getenv("KCTL_TIMEOUT", "20")))
+        
+        # Check return code first. A non-zero exit code is a definitive error.
+        if proc.returncode != 0:
+            return {"error": f"Kubectl command failed with exit code {proc.returncode}:\n{proc.stderr}"}
+
         stdout = proc.stdout
-        stderr = proc.stderr
+        stderr = proc.stderr # Capture stderr even on success for warnings
         parsed = stdout
+        
         if stdout:
-            try: parsed = json.loads(stdout)
-            except Exception: pass
+            try:
+                parsed = json.loads(stdout)
+            except json.JSONDecodeError:
+                # Not JSON, treat as plain text. This is expected for commands like 'describe' or 'logs'.
+                pass
+        
+        # Pass stderr to the error field to make it visible in the UI, but don't treat it as a failure.
         return {"output": parsed, "error": stderr or None}
+        
     except Exception as e:
         return {"error": str(e)}
 
