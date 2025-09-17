@@ -146,10 +146,11 @@ def execute_command(state: AgentState) -> Dict[str, Any]:
         # Check return code first. A non-zero exit code is a definitive error.
         if proc.returncode != 0:
             return {"error": f"Kubectl command failed with exit code {proc.returncode}:\n{proc.stderr}"}
-
         stdout = proc.stdout
         stderr = proc.stderr # Capture stderr even on success for warnings
         parsed = stdout
+
+        print(parsed)
         
         if stdout:
             try:
