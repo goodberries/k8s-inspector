@@ -241,16 +241,47 @@ def summarize_output(state: AgentState) -> Dict[str, Any]:
     if not ENABLE_SUMMARIZE: return {}
     br = _bedrock_client()
     if not br: return {}
+
+    output = state.get("output")
+    error = state.get("error")
     text = ""
-    if state.get("output"):
-        text = json.dumps(state["output"], indent=2) if isinstance(state["output"], (dict, list)) else str(state["output"])
-    elif state.get("error"):
-        text = state["error"]
+
+    if output:
+        # --- NEW: Pre-summarization for lists of items ---
+        if isinstance(output, dict) and "items" in output and isinstance(output["items"], list):
+            summaries = []
+            for item in output["items"]:
+                kind = item.get("kind", "Resource")
+                meta = item.get("metadata", {})
+                name = meta.get("name")
+                namespace = meta.get("namespace")
+                
+                summary = {"kind": kind, "name": name, "namespace": namespace}
+                
+                # Add pod-specific details
+                if kind == "Pod":
+                    status = item.get("status", {})
+                    summary["phase"] = status.get("phase")
+                    container_statuses = status.get("containerStatuses", [])
+                    total_restarts = sum(cs.get("restartCount", 0) for cs in container_statuses)
+                    summary["totalRestarts"] = total_restarts
+                
+                summaries.append(summary)
+            text = json.dumps({"summarizedItems": summaries}, indent=2)
+        else:
+            # Fallback for non-list output (e.g., from 'describe')
+            text = json.dumps(output, indent=2) if isinstance(output, (dict, list)) else str(output)
+    elif error:
+        text = error
+
     if not text: return {}
+    
+    # Truncate at the end to ensure it's always applied
     text = text[-MAX_SUMMARY_INPUT_CHARS:]
+    
     try:
         system = (
-            "You are a Kubernetes assistant. Given kubectl output, write: "
+            "You are a Kubernetes assistant. Given kubectl output (which may be pre-summarized), write: "
             "1) a concise, plain-English summary (1-3 sentences). "
             "2) 3-6 actionable suggestions to investigate or fix potential issues. "
             "Be specific but safe; only suggest read-only checks unless the issue is obvious. "
@@ -269,7 +300,8 @@ def summarize_output(state: AgentState) -> Dict[str, Any]:
         text_resp = "".join(b.get("text", "") for b in payload.get("content", []) if b.get("type") == "text")
         data = json.loads(text_resp)
         return {"summary": data.get("summary"), "suggestions": data.get("suggestions")}
-    except Exception:
+    except Exception as e:
+        print(f"--- Summarizer Error: {e} ---") # Added for debugging
         return {}
 
 # --- LangGraph Conditional Edges ---
