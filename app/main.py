@@ -15,8 +15,12 @@ import re
 class AgentState(TypedDict):
     question: str
     hints: Dict[str, Any]
+    # New fields for planning
+    plan: Optional[str]  # "direct" or "get_then_filter"
+    filter_criteria: Optional[Dict[str, Any]]
+    # Existing fields
     command: Optional[List[str]]
-    output: Optional[str]
+    output: Optional[Any]
     error: Optional[str]
     summary: Optional[str]
     suggestions: Optional[List[str]]
@@ -35,7 +39,7 @@ except Exception:
     boto3 = None
 
 # --- FastAPI App Setup ---
-app = FastAPI(title="K8s NL Interface Service", version="0.3.0-langgraph")
+app = FastAPI(title="K8s NL Interface Service", version="0.4.0-agent")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"]
@@ -71,26 +75,26 @@ def _bedrock_client() -> Optional[Any]:
     try: return boto3.client("bedrock-runtime", region_name=AWS_REGION)
     except Exception: return None
 
-def generate_command(state: AgentState) -> Dict[str, Any]:
+def planner(state: AgentState) -> Dict[str, Any]:
     br = _bedrock_client()
-    if not br:
-        return {"error": "Bedrock client not available"}
+    if not br: return {"error": "Bedrock client not available"}
+    
+    system = (
+        "You are a Kubernetes query planner. Your job is to decide how to answer a user's question. "
+        "You have two plans: 'direct' for simple questions, and 'get_then_filter' for questions that require searching or filtering. "
+        "Output STRICT JSON only. "
+        "Schema for 'direct': {\"plan\": \"direct\", \"command\": [\"kubectl\", \"...\"]}. "
+        "Schema for 'get_then_filter': {\"plan\": \"get_then_filter\", \"resource\": \"<pods|services|nodes|...etc>\", \"filter\": {\"field\": \"<e.g., metadata.name>\", \"operator\": \"<startswith|contains|equals>\", \"value\": \"<string>\"}}. "
+        "For 'get_then_filter', the resource should be what you need to list broadly. "
+        "Always use read-only commands (get, describe, logs, top). Never use write commands."
+    )
+    hints = state.get("hints", {})
+    hint_lines = [f"{k}={v}" for k, v in hints.items() if v]
+    user = f"Question: {state['question']}\nHints: {', '.join(hint_lines) if hint_lines else 'none'}"
+    
     try:
-        system = (
-            "You are an assistant that translates a user's Kubernetes question into a single, read-only kubectl command. "
-            "Rules: "
-            "- Only output a single command in STRICT JSON as {\"kubectl\": [\"kubectl\", ...]}. No prose. "
-            "- Use only read-only subcommands: get, describe, logs, top, api-resources, api-versions, cluster-info, version. "
-            "- Never use write/unsafe ops (delete, apply, create, replace, patch, edit, exec, attach, drain, cordon, taint, annotate, label). "
-            "- Prefer including '-o json' for 'get' commands. "
-            "- If the user hints namespace/name/container/tail_lines, incorporate them. "
-            "- If ambiguous, choose a safe default that best answers the question."
-        )
-        hints = state.get("hints", {})
-        hint_lines = [f"{k}={v}" for k, v in hints.items() if v]
-        user = f"Question: {state['question']}\nHints: {', '.join(hint_lines) if hint_lines else 'none'}"
         body = {
-            "anthropic_version": "bedrock-2023-05-31", "max_tokens": 200, "system": system,
+            "anthropic_version": "bedrock-2023-05-31", "max_tokens": 400, "system": system,
             "messages": [{"role": "user", "content": [{"type": "text", "text": user}]}],
         }
         resp = br.invoke_model(
@@ -99,13 +103,21 @@ def generate_command(state: AgentState) -> Dict[str, Any]:
         )
         payload = json.loads(resp["body"].read().decode("utf-8"))
         text_resp = "".join(b.get("text", "") for b in payload.get("content", []) if b.get("type") == "text")
-        data = json.loads(text_resp)
-        args = data.get("kubectl")
-        if isinstance(args, list) and args and args[0] == "kubectl":
-            return {"command": [str(a) for a in args]}
+        plan_data = json.loads(text_resp)
+
+        if plan_data.get("plan") == "get_then_filter":
+            resource = plan_data["resource"]
+            return {
+                "plan": "get_then_filter",
+                "command": ["kubectl", "get", resource, "-A", "-o", "json"],
+                "filter_criteria": plan_data["filter"],
+            }
+        elif plan_data.get("plan") == "direct":
+            return {"plan": "direct", "command": plan_data["command"]}
+        else:
+            return {"error": "LLM returned an invalid plan."}
     except Exception as e:
-        return {"error": f"LLM command generation failed: {e}"}
-    return {"error": "Failed to generate a valid command"}
+        return {"error": f"Planner failed: {e}"}
 
 READ_ONLY_SUBCMDS = {"get", "describe", "logs", "top", "api-resources", "api-versions", "cluster-info", "version"}
 FORBIDDEN_TOKENS = {";", "|", "&&", "||", ">", "<", "`", "$(", "${"}
@@ -139,6 +151,35 @@ def execute_command(state: AgentState) -> Dict[str, Any]:
         return {"output": parsed, "error": stderr or None}
     except Exception as e:
         return {"error": str(e)}
+
+def filter_results(state: AgentState) -> Dict[str, Any]:
+    criteria = state.get("filter_criteria")
+    output = state.get("output")
+    if not criteria or not output or not isinstance(output, dict) or "items" not in output:
+        return {"error": "Cannot filter: invalid criteria or non-list output."}
+
+    field_path = criteria["field"].split('.')
+    op = criteria["operator"]
+    value = criteria["value"]
+    
+    filtered_items = []
+    for item in output.get("items", []):
+        try:
+            current_val = item
+            for key in field_path:
+                current_val = current_val[key]
+            
+            match = False
+            if op == "startswith" and str(current_val).startswith(value): match = True
+            elif op == "contains" and value in str(current_val): match = True
+            elif op == "equals" and str(current_val) == value: match = True
+            
+            if match:
+                filtered_items.append(item)
+        except (KeyError, TypeError):
+            continue
+            
+    return {"output": {"items": filtered_items}}
 
 def summarize_output(state: AgentState) -> Dict[str, Any]:
     if not ENABLE_SUMMARIZE: return {}
@@ -176,28 +217,35 @@ def summarize_output(state: AgentState) -> Dict[str, Any]:
         return {}
 
 # --- LangGraph Conditional Edges ---
-def should_execute(state: AgentState) -> str:
-    return "execute_command" if not state.get("error") else "handle_error"
+def route_after_validation(state: AgentState) -> str:
+    if state.get("error"):
+        return "handle_error"
+    return "execute_command"
 
-def should_summarize(state: AgentState) -> str:
-    return "summarize_output" if state.get("output") or state.get("error") else END
+def route_after_execution(state: AgentState) -> str:
+    if state.get("error"):
+        return "summarize_output" # Summarize the error
+    if state.get("plan") == "get_then_filter":
+        return "filter_results"
+    return "summarize_output"
 
 def handle_error(state: AgentState) -> Dict[str, Any]:
-    # For now, just end. Could add retry logic here.
     return {"is_final": True}
 
 # --- Build and Compile Graph ---
 workflow = StateGraph(AgentState)
-workflow.add_node("generate_command", generate_command)
+workflow.add_node("planner", planner)
 workflow.add_node("validate_command", validate_command)
 workflow.add_node("execute_command", execute_command)
+workflow.add_node("filter_results", filter_results)
 workflow.add_node("summarize_output", summarize_output)
 workflow.add_node("handle_error", handle_error)
 
-workflow.set_entry_point("generate_command")
-workflow.add_edge("generate_command", "validate_command")
-workflow.add_conditional_edges("validate_command", should_execute)
-workflow.add_edge("execute_command", "summarize_output")
+workflow.set_entry_point("planner")
+workflow.add_edge("planner", "validate_command")
+workflow.add_conditional_edges("validate_command", route_after_validation)
+workflow.add_conditional_edges("execute_command", route_after_execution)
+workflow.add_edge("filter_results", "summarize_output")
 workflow.add_edge("summarize_output", END)
 workflow.add_edge("handle_error", END)
 
@@ -216,7 +264,7 @@ def ask(query: NLQuery):
     final_state = app_graph.invoke(initial_state)
 
     return ExecResult(
-        action="langgraph",
+        action=final_state.get("plan") or "agent",
         kubectl=final_state.get("command") or [],
         stdout=final_state.get("output") or "",
         stderr=final_state.get("error") or "",
