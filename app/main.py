@@ -105,6 +105,8 @@ def planner(state: AgentState) -> Dict[str, Any]:
         payload = json.loads(resp["body"].read().decode("utf-8"))
         text_resp = "".join(b.get("text", "") for b in payload.get("content", []) if b.get("type") == "text")
         plan_data = json.loads(text_resp)
+        
+        print(f"--- Planner: LLM generated plan --- \n{plan_data}\n--- End of planner output ---")
 
         if plan_data.get("plan") == "get_then_filter":
             resource = plan_data["resource"]
@@ -117,7 +119,6 @@ def planner(state: AgentState) -> Dict[str, Any]:
             return {"plan": "direct", "command": plan_data["command"]}
         else:
             return {"error": "LLM returned an invalid plan."}
-        print(plan_data)
     except Exception as e:
         return {"error": f"Planner failed: {e}"}
 
@@ -195,16 +196,22 @@ def filter_results(state: AgentState) -> Dict[str, Any]:
     op = criteria.get("operator", "contains")
     value = criteria["value"]
     
+    print(f"--- Filter: Starting filter with criteria: {criteria} ---")
+    
     filtered_items = []
     for item in output.get("items", []):
+        item_name = item.get("metadata", {}).get("name", "unknown")
         try:
-            # --- NEW: Special handling for restart counts ---
             if field_path_str == "status.containerStatuses.restartCount":
-                if any(cs.get("restartCount", 0) > 0 for cs in item.get("status", {}).get("containerStatuses", [])):
+                restarted_containers = [
+                    cs for cs in item.get("status", {}).get("containerStatuses", []) 
+                    if cs.get("restartCount", 0) > 0
+                ]
+                if restarted_containers:
+                    print(f"[MATCH] Pod '{item_name}' matched for restart counts: {[c.get('name') for c in restarted_containers]}")
                     filtered_items.append(item)
-                continue # Move to the next item
+                continue
 
-            # --- Existing logic for simple fields ---
             current_val = item
             for key in field_path_str.split('.'):
                 current_val = current_val[key]
@@ -219,15 +226,15 @@ def filter_results(state: AgentState) -> Dict[str, Any]:
             elif op == "greater_than":
                 try:
                     if float(current_val) > float(value): match = True
-                except (ValueError, TypeError):
-                    pass # Cannot compare if values are not numeric
+                except (ValueError, TypeError): pass
             
             if match:
+                print(f"[MATCH] Item '{item_name}' matched on field '{field_path_str}' ('{s_current_val}' {op} '{s_value}')")
                 filtered_items.append(item)
-            print(filtered_items)
         except (KeyError, TypeError):
             continue
             
+    print(f"--- Filter: Completed with {len(filtered_items)} items. ---")
     return {"output": {"items": filtered_items}}
 
 def summarize_output(state: AgentState) -> Dict[str, Any]:
