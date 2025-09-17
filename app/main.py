@@ -150,18 +150,25 @@ def execute_command(state: AgentState) -> Dict[str, Any]:
         stderr = proc.stderr # Capture stderr even on success for warnings
         parsed = stdout
 
-        #print(parsed)
-        print("this string is outside stdout code block")
-        for line in parsed[:5]:
+        print("--- Raw stdout (first 5 lines) ---")
+        for line in stdout.splitlines()[:5]:
             print(line)
+        print("--- End of raw stdout ---")
+        
+        if stderr:
+            print(f"--- Stderr --- \n{stderr}\n--- End of stderr ---")
 
         if stdout:
             try:
                 parsed = json.loads(stdout)
-                #print(parsed)
-                print("this string is inside stdout code block")
-                for line in parsed[:5]:
-                    print(line)
+                print("--- Parsed JSON (first 5 items) ---")
+                if isinstance(parsed, dict) and "items" in parsed:
+                    for item in parsed.get("items", [])[:5]:
+                        # Print just the name for brevity
+                        print(f"- {item.get('kind', 'Item')} named '{item.get('metadata', {}).get('name')}'")
+                else:
+                    print("Parsed JSON is not in the expected 'items' format.")
+                print("--- End of parsed JSON ---")
             except json.JSONDecodeError:
                 # Not JSON, treat as plain text. This is expected for commands like 'describe' or 'logs'.
                 pass
