@@ -150,11 +150,16 @@ def execute_command(state: AgentState) -> Dict[str, Any]:
         stderr = proc.stderr # Capture stderr even on success for warnings
         parsed = stdout
 
-        print(parsed)
-        
+        #print(parsed)
+        for line in parsed[:5]:
+            print(line)
+
         if stdout:
             try:
                 parsed = json.loads(stdout)
+                #print(parsed)
+                for line in parsed[:5]:
+                    print(line)
             except json.JSONDecodeError:
                 # Not JSON, treat as plain text. This is expected for commands like 'describe' or 'logs'.
                 pass
