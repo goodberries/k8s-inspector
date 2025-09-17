@@ -151,6 +151,7 @@ def execute_command(state: AgentState) -> Dict[str, Any]:
         parsed = stdout
 
         #print(parsed)
+        print("this string is outside stdout code block")
         for line in parsed[:5]:
             print(line)
 
@@ -158,6 +159,7 @@ def execute_command(state: AgentState) -> Dict[str, Any]:
             try:
                 parsed = json.loads(stdout)
                 #print(parsed)
+                print("this string is inside stdout code block")
                 for line in parsed[:5]:
                     print(line)
             except json.JSONDecodeError:
