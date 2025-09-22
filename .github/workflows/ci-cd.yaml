@@ -30,6 +30,21 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/k8s-inspector:${{ github.sha }}
+      
+      - name: Update deployment manifest
+        # ADDED: This step updates the image tag in your deployment file.
+        # Assumes your file is located at 'kubernetes/deployment.yaml'.
+        run: |
+          sed -i "s|image: .*|image: yashwanthydg/k8s-inspector:${{ github.sha }}|g" kubernetes/manifest.yaml
+  
+      - name: Commit and push manifest changes
+        # ADDED: This step commits the updated manifest file back to your main branch.
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add kubernetes/manifest.yaml
+          git diff --staged --quiet || git commit -m "CI: Update image tag to ${{ github.sha }}"
+          git push
 
   deploy:
     name: Deploy to Kubernetes
