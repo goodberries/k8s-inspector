@@ -15,7 +15,7 @@ spec:
       serviceAccountName: k8s-inspector
       containers:
         - name: app
-          image: yashwanthydg/k8s-inspector:v5
+          image: yashwanthydg/k8s-inspector:4f0051043d005e8a6414afc2eecd7fe3cbee750f
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
