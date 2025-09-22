@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: k8s-inspector
+  name: k8s-inspector #test
 spec:
   replicas: 1
   selector:
